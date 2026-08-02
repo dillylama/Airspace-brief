@@ -764,6 +764,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);height:24px}
   background:var(--cyan);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:14px;
   padding:13px;border-radius:9px}
 .run:disabled{opacity:.4;cursor:not-allowed}
+.run.not-ready{opacity:.45}
 
 .notes{padding:15px 17px;font-size:12.5px;color:var(--faint);line-height:1.6}
 .notes a{color:var(--dim)}
@@ -1061,7 +1062,7 @@ details.insp[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}
         </div>
       </div>
 
-      <button class="run" id="run" disabled>Generate brief</button>
+      <button class="run not-ready" id="run">Generate brief</button>
       <div class="notes">
         Data: <a href="https://atns.com/products/aim/RSA Airspaces in 3D.aspx" target="_blank" rel="noopener">ATNS RSA Airspaces in 3D</a>
         — accept terms (type <b style="color:var(--dim)">RSAKMZ</b>) to download. The file is named by AIRAC date.
@@ -2059,7 +2060,7 @@ function js(t,e,n){return t<e?(n-t)/(e-t):(t-n)/(t-e)}function Us(t,e,n,r){var i
     }).catch(function (e) { toast(e.message || 'Failed to load AOI', true); });
   }
 
-  function refreshRunBtn() { $('#run').disabled = !(state.data && state.aoi); }
+  function refreshRunBtn() { var b = $('#run'); if (!b) return; b.disabled = false; b.classList.toggle('not-ready', !(state.data && state.aoi)); }
 
   // ---------------- point AOI (map pick / coordinates) ----------------
   var pickMode = false, pickMarker = null;
@@ -2145,12 +2146,19 @@ function js(t,e,n){return t<e?(n-t)/(e-t):(t-n)/(t-e)}function Us(t,e,n,r){var i
   function opts() { return { ceilingFt: +$('#ceil').value, proximityKm: +$('#prox').value }; }
 
   function runBrief() {
-    if (!(state.data && state.aoi)) { toast('Load both the ATNS data and an AOI first', true); return; }
+    if (!state.data && !state.aoi) { toast('Load the ATNS airspace file (step 1) and set an AOI (step 2) first', true); return; }
+    if (!state.data) { toast('Load the ATNS airspace file first (step 1)', true); return; }
+    if (!state.aoi) { toast('Set an AOI first (step 2): load a KML, drop a point, or type coordinates', true); return; }
     var res;
     try { res = core.analyze(turf, state.aoi, state.data.features, opts()); }
     catch (e) { toast('Analysis error: ' + e.message, true); return; }
     state.lastResult = res;
-    renderBrief(res); renderMap(res);
+    try { renderBrief(res); } catch (e) { toast('Brief display error: ' + e.message, true); return; }
+    try { renderMap(res); } catch (e) { toast('Map display error: ' + e.message, true); }
+    toast('Brief generated');
+    if (window.innerWidth <= 860) {
+      try { $('#brief').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+    }
   }
 
   function feetLabel(lim) {
@@ -2829,6 +2837,10 @@ function js(t,e,n){return t<e?(n-t)/(e-t):(t-n)/(t-e)}function Us(t,e,n,r){var i
   }
 
   function init() {
+    refreshRunBtn();
+    window.addEventListener('error', function (e) {
+      try { toast('Error: ' + ((e && e.message) || 'unknown').slice(0, 120), true); } catch (x) {}
+    });
     wireDrop('#dropData', '#fileData', loadDataFile);
     wireDrop('#dropAoi', '#fileAoi', loadAoiFile);
     $('#ceil').oninput = function () { $('#ceilVal').textContent = (+this.value).toLocaleString() + ' ft'; };
